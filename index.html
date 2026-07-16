@@ -1121,8 +1121,8 @@
       var tagText = "";
       if(hasAllocation){
         if(overflow){ statusClass="over"; jarColorHex="#FF5C5C"; tagText = fmt(Math.abs(remaining))+" over"; }
-        else if(pctOfAllocation >= 80){ statusClass="warn"; jarColorHex="#FF9F43"; tagText = fmt(remaining)+" left"; }
-        else { statusClass="ok"; tagText = fmt(remaining)+" under"; }
+        else if(pctOfAllocation >= 80){ statusClass="warn"; jarColorHex="#FF9F43"; tagText = fmt(s.spent)+" under"; }
+        else { statusClass="ok"; tagText = fmt(s.spent)+" under"; }
       } else {
         statusClass = "empty"; tagText = "no income logged yet";
       }
