@@ -6,8 +6,8 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#0B1220",
-  "theme_color": "#0B1220",
+  "background_color": "#080B12",
+  "theme_color": "#080B12",
   "icons": [
     {
       "src": "icon-192.png",
@@ -22,10 +22,16 @@
       "purpose": "any"
     },
     {
-      "src": "icon-512.png",
+      "src": "icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }
