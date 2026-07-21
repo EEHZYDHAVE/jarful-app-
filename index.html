@@ -522,6 +522,22 @@
   }
   #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
+  #updateBanner{
+    position:fixed; top:calc(16px + env(safe-area-inset-top, 0px)); left:50%; transform:translateX(-50%) translateY(-14px);
+    display:flex; align-items:center; gap:12px;
+    background:var(--glass-bg-strong); border:1px solid var(--glass-border-hi); border-radius:999px;
+    padding:10px 10px 10px 18px; box-shadow:var(--shadow-lift);
+    -webkit-backdrop-filter:blur(24px) saturate(1.4); backdrop-filter:blur(24px) saturate(1.4);
+    opacity:0; transition:opacity .25s, transform .25s; z-index:90;
+    font-size:0.86rem; color:var(--text); max-width:calc(100vw - 32px);
+  }
+  #updateBanner.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  #updateBanner span{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  #updateBannerRefresh{
+    flex-shrink:0; background:linear-gradient(135deg, var(--teal-bright), var(--teal-deep) 140%); color:#08120E;
+    border:none; border-radius:999px; padding:8px 16px; font-weight:700; font-size:0.84rem;
+  }
+
   .modal-overlay{
     position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center;
     padding:20px; background:rgba(4,7,12,0.6); overflow-y:auto;
@@ -984,6 +1000,11 @@
   </div>
 
   <div id="toast"></div>
+
+  <div id="updateBanner" style="display:none;">
+    <span>A new version of Jarful is ready.</span>
+    <button type="button" id="updateBannerRefresh">Refresh</button>
+  </div>
 
   <div id="editModalOverlay" class="modal-overlay" style="display:none;">
     <div class="modal-card">
@@ -2887,10 +2908,34 @@
 
   if("serviceWorker" in navigator){
     window.addEventListener("load", function(){
-      navigator.serviceWorker.register("service-worker.js").catch(function(err){
+      navigator.serviceWorker.register("service-worker.js").then(function(reg){
+        // Check for an update right away, and again whenever the app regains focus —
+        // useful since a PWA can sit open for days without a full navigation.
+        reg.update();
+        document.addEventListener("visibilitychange", function(){
+          if(document.visibilityState === "visible") reg.update();
+        });
+      }).catch(function(err){
         console.error("Service worker registration failed", err);
       });
+
+      var hadControllerAtLoad = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener("controllerchange", function(){
+        // Only prompt if we already had a controller before this — that means
+        // an existing install just got replaced by a new one, not a first-time setup.
+        if(!hadControllerAtLoad) return;
+        var banner = document.getElementById("updateBanner");
+        if(!banner) return;
+        banner.style.display = "flex";
+        requestAnimationFrame(function(){ banner.classList.add("show"); });
+      });
     });
+    var updateBannerBtn = document.getElementById("updateBannerRefresh");
+    if(updateBannerBtn){
+      updateBannerBtn.addEventListener("click", function(){
+        window.location.reload();
+      });
+    }
   }
 
 })();
