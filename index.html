@@ -1491,7 +1491,10 @@
     track.appendChild(buildSlide(heroIdx));
     track.appendChild(buildSlide(n > 1 ? nextIdx : heroIdx));
     track.classList.remove("dragging");
+    track.style.transition = "none";
     track.style.transform = "translateX(-33.3333%)";
+    void track.offsetWidth; // force reflow so the "none" transition is applied before we restore it
+    track.style.transition = "";
 
     if(n > 1){
       data.jars.forEach(function(j, idx){
