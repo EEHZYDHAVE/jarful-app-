@@ -170,6 +170,25 @@
   :root[data-theme="light"] .theme-icon-btn .icon-sun{display:none;}
   :root[data-theme="light"] .theme-icon-btn .icon-moon{display:block;}
 
+  .refresh-app-btn{display:none; color:var(--text-muted); transition:background .15s, color .15s;}
+  .refresh-app-btn.enabled{display:flex;}
+  .refresh-app-btn.spinning svg{animation:refreshSpin .6s ease;}
+  @keyframes refreshSpin{ to{transform:rotate(360deg);} }
+  .refresh-app-btn--desktop{
+    align-items:center; justify-content:center; gap:8px; width:100%; margin-top:8px; padding:9px 0;
+    border:1px solid var(--glass-border); border-radius:999px; background:var(--glass-bg);
+    font-size:0.84rem; font-weight:600;
+    -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+  }
+  .refresh-app-btn--desktop:hover{background:var(--glass-bg-strong); color:var(--teal-bright); border-color:var(--glass-border-hi);}
+  .refresh-app-btn--desktop svg{width:16px; height:16px;}
+  .refresh-app-btn--mobile{
+    align-items:center; justify-content:center; width:44px; height:44px; border-radius:50%; flex-shrink:0;
+    border:1px solid var(--line); background:var(--ink-soft);
+  }
+  .refresh-app-btn--mobile:active{background:var(--glass-bg-strong); color:var(--teal-bright);}
+  .refresh-app-btn--mobile svg{width:20px; height:20px;}
+
   .main-col{flex:1; min-width:0; display:flex; flex-direction:column;}
   .topbar-mobile{display:none;}
 
@@ -635,6 +654,7 @@
       z-index:60;
     }
     .brand, .theme-toggle{display:none;}
+    .refresh-app-btn--desktop.enabled, .refresh-app-btn--desktop{display:none;}
     .navlist{flex-direction:row; justify-content:space-around; gap:2px; width:100%;}
     .navlist button{
       flex-direction:column; gap:5px; padding:10px 6px; font-size:0.72rem; border-radius:18px;
@@ -752,6 +772,10 @@
       <button data-theme="dark" class="active">Dark</button>
       <button data-theme="light">Light</button>
     </div>
+    <button class="refresh-app-btn refresh-app-btn--desktop" id="refreshAppBtnDesktop" aria-label="Refresh app" type="button">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 1-2.34-5.66" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 4v5h-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Refresh app</span>
+    </button>
   </aside>
 
   <div class="main-col">
@@ -762,10 +786,15 @@
         </span>
         <h1 style="font-size:1.1rem;">Jarful</h1>
       </div>
-      <button class="theme-icon-btn" id="themeIconToggle" aria-label="Toggle dark/light theme">
-        <svg class="icon-sun" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.6" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2.6M12 18.9v2.6M4.6 12H2M22 12h-2.6M6.3 6.3 4.5 4.5M19.5 19.5l-1.8-1.8M17.7 6.3l1.8-1.8M4.5 19.5l1.8-1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        <svg class="icon-moon" viewBox="0 0 24 24" fill="none"><path d="M20 14.2A8.4 8.4 0 1 1 9.8 4a6.7 6.7 0 0 0 10.2 10.2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-      </button>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="refresh-app-btn refresh-app-btn--mobile" id="refreshAppBtnMobile" aria-label="Refresh app" type="button">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 1-2.34-5.66" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 4v5h-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="theme-icon-btn" id="themeIconToggle" aria-label="Toggle dark/light theme">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.6" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2.6M12 18.9v2.6M4.6 12H2M22 12h-2.6M6.3 6.3 4.5 4.5M19.5 19.5l-1.8-1.8M17.7 6.3l1.8-1.8M4.5 19.5l1.8-1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none"><path d="M20 14.2A8.4 8.4 0 1 1 9.8 4a6.7 6.7 0 0 0 10.2 10.2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
     </div>
 
     <div id="app-main">
@@ -951,6 +980,26 @@
                 </div>
                 <label class="toggle-switch">
                   <input type="checkbox" id="jarAnimToggle">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row-label">Jar chips follow the carousel</div>
+                  <div class="settings-row-sub">Auto-scroll the row below the carousel so the active jar's chip is always in view.</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="chipFollowToggle">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row-label">Manual refresh button</div>
+                  <div class="settings-row-sub">Show a button near the theme toggle to reload and pick up updates on demand.</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="refreshBtnToggle">
                   <span class="toggle-track"><span class="toggle-thumb"></span></span>
                 </label>
               </div>
@@ -1245,7 +1294,9 @@
     manageMobileTab: "jars",
     heroJarIndex: null,
     shelfViewMobile: localStorage.getItem("jarful_shelf_view") || "hero",
-    jarAnimation: localStorage.getItem("jarful_jar_anim") !== "off"
+    jarAnimation: localStorage.getItem("jarful_jar_anim") !== "off",
+    chipFollowActive: localStorage.getItem("jarful_chip_follow") === "on",
+    showRefreshBtn: localStorage.getItem("jarful_refresh_btn") === "on"
   };
   var pieChartInst=null, barChartInst=null, incomePieChartInst=null;
   var openColorPickerJarId = null;
@@ -1475,6 +1526,7 @@
   }
 
   function renderJarHero(stats){
+    var scrollY = window.scrollY || document.documentElement.scrollTop || 0;
     var track = document.getElementById("jarHeroTrack");
     var dots = document.getElementById("jarHeroDots");
     var chipRow = document.getElementById("jarChipRow");
@@ -1528,6 +1580,7 @@
       });
     }
 
+    var activeChip = null;
     data.jars.forEach(function(j, idx){
       var v = computeJarView(j, stats);
       var chip = document.createElement("button");
@@ -1540,6 +1593,19 @@
         '<span class="jar-chip-label">'+escapeHtml(j.name)+'</span>'+
         '<span class="jar-chip-amt mono">'+(v.hasAllocation ? fmt(v.remaining) : "—")+'</span>';
       chipRow.appendChild(chip);
+      if(idx===heroIdx) activeChip = chip;
+    });
+
+    if(state.chipFollowActive && activeChip){
+      activeChip.scrollIntoView({behavior:"smooth", block:"nearest", inline:"center"});
+    }
+
+    // Rebuilding this section can make some mobile browsers reset the page's
+    // scroll position to the top. Put it back, with a couple of safety nets
+    // since the reset can happen a frame after this function returns.
+    if(window.scrollY !== scrollY) window.scrollTo(0, scrollY);
+    requestAnimationFrame(function(){
+      if(Math.abs((window.scrollY||0) - scrollY) > 1) window.scrollTo(0, scrollY);
     });
   }
 
@@ -2889,6 +2955,44 @@
     state.jarAnimation = jarAnimToggle.checked;
     localStorage.setItem("jarful_jar_anim", state.jarAnimation ? "on" : "off");
     if(state.view==="dashboard") renderDashboard();
+  });
+
+  var chipFollowToggle = document.getElementById("chipFollowToggle");
+  chipFollowToggle.checked = state.chipFollowActive;
+  chipFollowToggle.addEventListener("change", function(){
+    state.chipFollowActive = chipFollowToggle.checked;
+    localStorage.setItem("jarful_chip_follow", state.chipFollowActive ? "on" : "off");
+  });
+
+  function applyRefreshBtnVisibility(){
+    document.querySelectorAll(".refresh-app-btn").forEach(function(btn){
+      btn.classList.toggle("enabled", state.showRefreshBtn);
+    });
+  }
+  var refreshBtnToggle = document.getElementById("refreshBtnToggle");
+  refreshBtnToggle.checked = state.showRefreshBtn;
+  applyRefreshBtnVisibility();
+  refreshBtnToggle.addEventListener("change", function(){
+    state.showRefreshBtn = refreshBtnToggle.checked;
+    localStorage.setItem("jarful_refresh_btn", state.showRefreshBtn ? "on" : "off");
+    applyRefreshBtnVisibility();
+  });
+
+  function handleManualRefresh(btn){
+    btn.classList.add("spinning");
+    var done = false;
+    var proceed = function(){ if(done) return; done = true; window.location.reload(); };
+    if("serviceWorker" in navigator){
+      navigator.serviceWorker.getRegistration().then(function(reg){
+        if(reg) return reg.update().catch(function(){});
+      }).then(proceed).catch(proceed);
+      setTimeout(proceed, 1500); // don't leave the user stuck if the update check hangs
+    } else {
+      setTimeout(proceed, 350);
+    }
+  }
+  document.querySelectorAll(".refresh-app-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){ handleManualRefresh(btn); });
   });
 
   document.querySelectorAll(".modal-overlay").forEach(function(overlay){

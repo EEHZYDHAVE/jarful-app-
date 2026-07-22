@@ -1,7 +1,7 @@
 // Bump SW_VERSION on every deploy. This is what makes the browser notice
 // there's an update at all — service worker updates are only detected when
 // this file's bytes change, not when index.html or other assets change.
-const SW_VERSION = "v2";
+const SW_VERSION = "v3";
 const CACHE_NAME = "jarful-cache-" + SW_VERSION;
 const APP_SHELL = [
   "./",
@@ -38,30 +38,11 @@ self.addEventListener("fetch", function(event){
   if(event.request.method !== "GET") return;
   if(new URL(event.request.url).origin !== self.location.origin) return;
 
-  var isNavigation = event.request.mode === "navigate" ||
-    (event.request.headers.get("accept") || "").indexOf("text/html") !== -1;
-
-  if(isNavigation){
-    // Network-first for the app shell itself: always try to get the latest
-    // index.html when online. Cache is only a fallback for offline use.
-    event.respondWith(
-      fetch(event.request).then(function(response){
-        if(response && response.status === 200){
-          var copy = response.clone();
-          caches.open(CACHE_NAME).then(function(cache){ cache.put(event.request, copy); });
-        }
-        return response;
-      }).catch(function(){
-        return caches.match(event.request).then(function(cached){
-          return cached || caches.match("./index.html");
-        });
-      })
-    );
-    return;
-  }
-
-  // Cache-first for everything else (icons, manifest) — these change rarely,
-  // and it's fine for them to lag a request behind while the cache refreshes.
+  // Cache-first for everything, including the app shell itself — this is a
+  // financial tracker, it needs to open instantly with no connection at all.
+  // Freshness is handled separately: SW_VERSION bumps trigger a background
+  // update + the in-app "new version available" banner, not per-request
+  // network races that can stall the very first load when offline.
   event.respondWith(
     caches.match(event.request).then(function(cached){
       var networkFetch = fetch(event.request).then(function(response){
