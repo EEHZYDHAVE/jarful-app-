@@ -1,7 +1,7 @@
 // Bump SW_VERSION on every deploy. This is what makes the browser notice
 // there's an update at all — service worker updates are only detected when
 // this file's bytes change, not when index.html or other assets change.
-const SW_VERSION = "v3";
+const SW_VERSION = "v4";
 const CACHE_NAME = "jarful-cache-" + SW_VERSION;
 const APP_SHELL = [
   "./",

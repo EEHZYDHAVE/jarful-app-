@@ -870,6 +870,11 @@
                 <select id="txnSource"></select>
               </label>
             </div>
+            <div id="jarOverrideField" style="display:none;">
+              <label>Put it all in
+                <select id="txnJarOverride"><option value="">Auto-split across jars</option></select>
+              </label>
+            </div>
             <label>Note
               <input type="text" id="txnNote" placeholder="optional">
             </label>
@@ -1076,6 +1081,11 @@
         <div id="editSourceField" style="display:none;">
           <label>Source
             <select id="editSource"></select>
+          </label>
+        </div>
+        <div id="editJarOverrideField" style="display:none;">
+          <label>Put it all in
+            <select id="editJarOverride"><option value="">Auto-split across jars</option></select>
           </label>
         </div>
         <label>Note
@@ -1731,12 +1741,14 @@
 
     var catField = document.getElementById("categoryField");
     var sourceField = document.getElementById("sourceField");
+    var jarOverrideField = document.getElementById("jarOverrideField");
     var submitBtn = document.getElementById("submitTxn");
     var splitPreview = document.getElementById("splitPreview");
 
     if(state.txnType === "expense"){
       catField.style.display = "";
       sourceField.style.display = "none";
+      jarOverrideField.style.display = "none";
       submitBtn.classList.add("expense-mode");
       submitBtn.textContent = "Log expense";
       var sel = document.getElementById("txnCategory");
@@ -1756,6 +1768,7 @@
     } else {
       catField.style.display = "none";
       sourceField.style.display = "";
+      jarOverrideField.style.display = "";
       submitBtn.classList.remove("expense-mode");
       submitBtn.textContent = "Log income";
       var srcSel = document.getElementById("txnSource");
@@ -1770,6 +1783,16 @@
           srcSel.appendChild(opt);
         });
       }
+      var jarSel = document.getElementById("txnJarOverride");
+      var keepJarSel = jarSel.value;
+      jarSel.innerHTML = '<option value="">Auto-split across jars</option>';
+      data.jars.forEach(function(j){
+        var opt = document.createElement("option");
+        opt.value = j.id;
+        opt.textContent = j.name;
+        jarSel.appendChild(opt);
+      });
+      if(data.jars.some(function(j){ return j.id===keepJarSel; })) jarSel.value = keepJarSel;
       updateSplitPreview();
     }
   }
@@ -1782,6 +1805,9 @@
     updateCurrencyNote();
     if(state.txnType==="income") updateSplitPreview();
   });
+  document.getElementById("txnJarOverride").addEventListener("change", function(){
+    updateSplitPreview();
+  });
 
   function updateSplitPreview(){
     var amount = getConvertedAmount().base || 0;
@@ -1789,6 +1815,15 @@
     if(amount<=0 || data.jars.length===0){
       preview.classList.remove("show");
       return;
+    }
+    var overrideJarId = document.getElementById("txnJarOverride").value;
+    if(overrideJarId){
+      var overrideJar = jarById(overrideJarId);
+      if(overrideJar){
+        preview.innerHTML = '<div class="split-row"><span><span class="swatch" style="background:'+overrideJar.color+';"></span>All of it → '+escapeHtml(overrideJar.name)+'</span><span class="mono">'+fmt(amount)+'</span></div>';
+        preview.classList.add("show");
+        return;
+      }
     }
     var rows = data.jars.map(function(j){
       var split = round2(amount * (Number(j.percent)/100));
@@ -1822,14 +1857,23 @@
       if(state.txnType==="income"){
         var sourceId = document.getElementById("txnSource").value;
         if(!sourceId){ showToast("Add an income source first, in Manage."); return; }
+        var overrideJarId = document.getElementById("txnJarOverride").value;
         var splits = {};
-        data.jars.forEach(function(j){ splits[j.id] = round2(amount * (Number(j.percent)/100)); });
+        var toastMsg;
+        if(overrideJarId && jarById(overrideJarId)){
+          data.jars.forEach(function(j){ splits[j.id] = 0; });
+          splits[overrideJarId] = amount;
+          toastMsg = "Income logged to "+jarById(overrideJarId).name+".";
+        } else {
+          data.jars.forEach(function(j){ splits[j.id] = round2(amount * (Number(j.percent)/100)); });
+          toastMsg = "Income logged and split across your jars.";
+        }
         var allocatedSum = Object.values(splits).reduce(function(a,b){ return a+b; },0);
         data.transactions.push({
           id:uid("t"), type:"income", amount:amount, date:date, note:note, sourceId:sourceId,
           splits:splits, unallocated:round2(amount-allocatedSum)
         });
-        showToast("Income logged and split across your jars.");
+        showToast(toastMsg);
       } else {
         var catId = document.getElementById("txnCategory").value;
         if(!catId){ showToast("Add a category first, in Manage."); return; }
@@ -1839,6 +1883,7 @@
       save(data);
       document.getElementById("txnAmount").value = "";
       document.getElementById("txnNote").value = "";
+      document.getElementById("txnJarOverride").value = "";
       updateCurrencyNote();
       updateSplitPreview();
     }catch(err){
@@ -2047,7 +2092,13 @@
           chipColor = "var(--teal-bright)";
           chipLabel = "Income";
           title = "Income";
-          sub = (t.note ? t.note+" · " : "") + "split across "+data.jars.length+" jars";
+          var fundedJarIds = t.splits ? Object.keys(t.splits).filter(function(jid){ return t.splits[jid] > 0; }) : [];
+          if(fundedJarIds.length===1){
+            var directedJar = jarById(fundedJarIds[0]);
+            sub = (t.note ? t.note+" · " : "") + (directedJar ? "→ "+escapeHtml(directedJar.name) : "split across "+data.jars.length+" jars");
+          } else {
+            sub = (t.note ? t.note+" · " : "") + "split across "+data.jars.length+" jars";
+          }
         } else {
           var cat = categoryById(t.categoryId);
           var jar = cat ? jarById(cat.jarId) : null;
@@ -2167,9 +2218,11 @@
 
     var catField = document.getElementById("editCategoryField");
     var srcField = document.getElementById("editSourceField");
+    var jarOverrideField = document.getElementById("editJarOverrideField");
     if(t.type==="expense"){
       catField.style.display = "";
       srcField.style.display = "none";
+      jarOverrideField.style.display = "none";
       var sel = document.getElementById("editCategory");
       sel.innerHTML = "";
       data.categories.forEach(function(c){
@@ -2183,6 +2236,7 @@
     } else {
       catField.style.display = "none";
       srcField.style.display = "";
+      jarOverrideField.style.display = "";
       var srcSel = document.getElementById("editSource");
       srcSel.innerHTML = "";
       data.incomeSources.forEach(function(s){
@@ -2191,6 +2245,17 @@
         opt.textContent = s.name;
         if(s.id===t.sourceId) opt.selected = true;
         srcSel.appendChild(opt);
+      });
+      var fundedJarIds = t.splits ? Object.keys(t.splits).filter(function(jid){ return t.splits[jid] > 0; }) : [];
+      var currentOverride = fundedJarIds.length===1 ? fundedJarIds[0] : "";
+      var jarSel = document.getElementById("editJarOverride");
+      jarSel.innerHTML = '<option value="">Auto-split across jars</option>';
+      data.jars.forEach(function(j){
+        var opt = document.createElement("option");
+        opt.value = j.id;
+        opt.textContent = j.name;
+        if(j.id===currentOverride) opt.selected = true;
+        jarSel.appendChild(opt);
       });
     }
     document.getElementById("editModalOverlay").style.display = "flex";
@@ -2227,8 +2292,14 @@
         var srcId = document.getElementById("editSource").value;
         if(!srcId){ showToast("Choose a source."); return; }
         t.sourceId = srcId;
+        var editOverrideJarId = document.getElementById("editJarOverride").value;
         var splits = {};
-        data.jars.forEach(function(j){ splits[j.id] = round2(t.amount * (Number(j.percent)/100)); });
+        if(editOverrideJarId && jarById(editOverrideJarId)){
+          data.jars.forEach(function(j){ splits[j.id] = 0; });
+          splits[editOverrideJarId] = t.amount;
+        } else {
+          data.jars.forEach(function(j){ splits[j.id] = round2(t.amount * (Number(j.percent)/100)); });
+        }
         var allocatedSum = Object.values(splits).reduce(function(a,b){ return a+b; },0);
         t.splits = splits;
         t.unallocated = round2(t.amount - allocatedSum);
