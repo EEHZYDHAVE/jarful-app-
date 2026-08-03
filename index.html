@@ -216,7 +216,7 @@
   .view.active{display:block;}
   @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
 
-  .summary-row{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:26px;}
+  .summary-row{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:26px;}
   .summary-stat{
     background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:14px;
     padding:15px 17px; box-shadow:var(--shadow-card);
@@ -224,6 +224,7 @@
   }
   .summary-stat .label{display:block; font-size:0.78rem; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:7px;}
   .summary-stat .value{font-size:1.42rem; color:var(--paper); font-weight:600; font-family:'Space Grotesk', sans-serif; letter-spacing:-0.01em;}
+  .summary-stat .value.negative{color:var(--alert);}
 
   .section-label{font-size:0.86rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:12px;}
   .section-toggle{
@@ -274,6 +275,7 @@
   .jar-tag.empty{background:var(--ink-softer); color:var(--text-faint);}
   .jar-balance-row{display:flex; justify-content:space-between; align-items:baseline; width:100%; margin-top:14px; padding-top:12px; border-top:1px solid var(--line); font-size:0.78rem; color:var(--text-faint);}
   .jar-balance-row .val{color:var(--paper); font-weight:700; font-size:0.92rem;}
+  .jar-balance-row .val.negative{color:var(--alert);}
 
 
   .jar-hero-panel{display:none;}
@@ -326,6 +328,7 @@
     .jar-chip-fill{position:absolute; left:0; bottom:0; height:3px; background:var(--chip-color, var(--teal-bright)); border-radius:0 3px 0 0;}
     .jar-chip-label{position:relative; z-index:1; font-size:0.76rem; color:var(--text-muted); font-weight:600; white-space:nowrap;}
     .jar-chip-amt{position:relative; z-index:1; font-size:0.92rem; color:var(--paper); font-weight:700; font-family:'IBM Plex Mono', monospace;}
+    .jar-chip-amt.negative{color:var(--alert);}
   }
 
   .add-toggle{display:flex; gap:8px; margin-bottom:20px;}
@@ -626,6 +629,9 @@
   }
   .gh-connected-title{font-weight:700; color:var(--teal-bright); font-size:0.96rem;}
   .gh-connected-repo{color:var(--text-muted); font-size:0.86rem; font-family:'IBM Plex Mono', monospace; margin-top:2px;}
+  .auto-sync-indicator{display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--text-faint); margin-left:6px; vertical-align:middle;}
+  .auto-sync-indicator.syncing{background:var(--teal-bright); animation:autoSyncPulse 1s ease-in-out infinite;}
+  @keyframes autoSyncPulse{0%,100%{opacity:0.4;} 50%{opacity:1;}}
   .sync-disconnect{color:var(--alert);}
   .sync-disconnect:hover{background:var(--alert-soft);}
   .sync-actions{display:flex; gap:10px; flex-wrap:wrap;}
@@ -698,7 +704,7 @@
     @keyframes mtabInRight{from{transform:translateX(36px); opacity:0;} to{transform:translateX(0); opacity:1;}}
     @keyframes mtabInLeft{from{transform:translateX(-36px); opacity:0;} to{transform:translateX(0); opacity:1;}}
     .charts-grid{grid-template-columns:1fr;}
-    .summary-row{grid-template-columns:1fr 1fr 1fr; gap:8px;}
+    .summary-row{grid-template-columns:1fr 1fr; gap:8px;}
     .summary-stat{padding:12px 10px; border-radius:14px;}
     .summary-stat .value{font-size:1.26rem;}
     .shelf{grid-template-columns:repeat(2, 1fr); gap:14px;}
@@ -810,6 +816,7 @@
           <div class="summary-row">
             <div class="summary-stat"><span class="label">Income</span><span class="value mono" id="sumIncome">₦0</span></div>
             <div class="summary-stat"><span class="label">Spent</span><span class="value mono" id="sumSpent">₦0</span></div>
+            <div class="summary-stat"><span class="label">Net</span><span class="value mono" id="sumNet">₦0</span></div>
             <div class="summary-stat"><span class="label">Unallocated</span><span class="value mono" id="sumUnallocated">₦0</span></div>
           </div>
 
@@ -1022,6 +1029,16 @@
                     <div class="gh-connected-repo" id="ghConnectedRepo">–</div>
                   </div>
                 </div>
+                <div class="settings-row" style="padding:10px 0;">
+                  <div>
+                    <div class="settings-row-label">Auto-sync <span class="auto-sync-indicator" id="autoSyncIndicator" aria-hidden="true"></span></div>
+                    <div class="settings-row-sub">Push to GitHub automatically a couple seconds after any change, and again once you're back online.</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="autoSyncToggle">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </label>
+                </div>
                 <div class="sync-actions">
                   <button type="button" id="syncPullBtn" class="modal-btn-secondary">↓ Pull from GitHub</button>
                   <button type="button" id="syncPushBtn" class="modal-btn-secondary">↑ Push to GitHub</button>
@@ -1141,7 +1158,9 @@
   function round2(n){ return Math.round((n + Number.EPSILON) * 100) / 100; }
   function fmt(n){
     var v = round2(n||0);
-    return "₦" + v.toLocaleString("en-NG", {minimumFractionDigits:0, maximumFractionDigits:2});
+    var neg = v < 0;
+    var abs = Math.abs(v);
+    return (neg ? "-" : "") + "₦" + abs.toLocaleString("en-NG", {minimumFractionDigits:0, maximumFractionDigits:2});
   }
   function pad(n){ return n<10 ? "0"+n : ""+n; }
   function isoDate(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
@@ -1289,6 +1308,7 @@
   function save(d){
     try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
     catch(e){ console.error("Save failed", e); showToast("Couldn't save: storage may be full or blocked."); }
+    if(typeof scheduleAutoSync === "function") scheduleAutoSync();
   }
 
   var data = load();
@@ -1306,6 +1326,7 @@
     shelfViewMobile: localStorage.getItem("jarful_shelf_view") || "hero",
     jarAnimation: localStorage.getItem("jarful_jar_anim") !== "off",
     chipFollowActive: localStorage.getItem("jarful_chip_follow") === "on",
+    autoSyncEnabled: localStorage.getItem("jarful_auto_sync") === "on",
     showRefreshBtn: localStorage.getItem("jarful_refresh_btn") === "on"
   };
   var pieChartInst=null, barChartInst=null, incomePieChartInst=null;
@@ -1451,6 +1472,10 @@
     document.getElementById("sumIncome").textContent = fmt(stats.totalIncome);
     document.getElementById("sumSpent").textContent = fmt(stats.totalSpent);
     document.getElementById("sumUnallocated").textContent = fmt(stats.totalUnallocated);
+    var netEl = document.getElementById("sumNet");
+    var net = stats.totalIncome - stats.totalSpent;
+    netEl.textContent = fmt(net);
+    netEl.classList.toggle("negative", net < 0);
 
     var sourceSection = document.getElementById("sourceSection");
     var sourceShelf = document.getElementById("sourceShelf");
@@ -1532,7 +1557,7 @@
       '<div class="jar-hero mono">'+(v.hasAllocation ? fmt(v.remaining) : fmt(0))+'</div>'+
       '<div class="jar-hero-sub">'+(v.hasAllocation ? "of "+fmt(v.s.allocated)+" allocated" : "log income to allocate this jar")+'</div>'+
       '<span class="jar-tag '+v.statusClass+'">'+v.tagText+'</span>'+
-      '<div class="jar-balance-row"><span>Running balance</span><span class="val mono">'+fmt(v.s.balance)+'</span></div>';
+      '<div class="jar-balance-row"><span>Running balance</span><span class="val mono'+(v.s.balance<0?' negative':'')+'">'+fmt(v.s.balance)+'</span></div>';
   }
 
   function renderJarHero(stats){
@@ -1601,7 +1626,7 @@
       chip.innerHTML =
         '<span class="jar-chip-fill" style="width:'+(v.hasAllocation ? Math.round(v.pctRemaining) : 0)+'%;"></span>'+
         '<span class="jar-chip-label">'+escapeHtml(j.name)+'</span>'+
-        '<span class="jar-chip-amt mono">'+(v.hasAllocation ? fmt(v.remaining) : "—")+'</span>';
+        '<span class="jar-chip-amt mono'+(v.hasAllocation && v.remaining<0 ? ' negative' : '')+'">'+(v.hasAllocation ? fmt(v.remaining) : "—")+'</span>';
       chipRow.appendChild(chip);
       if(idx===heroIdx) activeChip = chip;
     });
@@ -2934,18 +2959,19 @@
     refreshSyncConnectionUI();
     setSyncStatus("Disconnected.");
     showToast("Disconnected from GitHub.");
+    if(state.autoSyncEnabled){
+      state.autoSyncEnabled = false;
+      localStorage.setItem("jarful_auto_sync", "off");
+      var t = document.getElementById("autoSyncToggle");
+      if(t) t.checked = false;
+      clearTimeout(autoSyncTimer);
+    }
   });
 
-  document.getElementById("syncPushBtn").addEventListener("click", function(){
-    var cfg = readSyncFieldsIntoConfig();
-    if(!cfg.owner || !cfg.repo || !cfg.token){ setSyncStatus("Fill in username, repo, and token first.", "error"); return; }
-    saveSyncConfig(cfg);
-    setSyncStatus("Pushing...");
-
+  function pushDataToGitHub(cfg){
     var url = githubContentsUrl(cfg);
     var headers = { "Authorization": "Bearer "+cfg.token, "Accept": "application/vnd.github+json" };
-
-    fetch(url, { headers: headers })
+    return fetch(url, { headers: headers })
       .then(function(res){ return res.status===404 ? null : res.json(); })
       .then(function(existing){
         var body = {
@@ -2962,7 +2988,15 @@
       .then(function(res){
         if(!res.ok) return res.json().then(function(j){ throw new Error(j.message || ("HTTP "+res.status)); });
         return res.json();
-      })
+      });
+  }
+
+  document.getElementById("syncPushBtn").addEventListener("click", function(){
+    var cfg = readSyncFieldsIntoConfig();
+    if(!cfg.owner || !cfg.repo || !cfg.token){ setSyncStatus("Fill in username, repo, and token first.", "error"); return; }
+    saveSyncConfig(cfg);
+    setSyncStatus("Pushing...");
+    pushDataToGitHub(cfg)
       .then(function(){
         setSyncStatus("Pushed successfully at "+new Date().toLocaleTimeString()+".", "ok");
         showToast("Data pushed to GitHub.");
@@ -3074,6 +3108,63 @@
         el.scrollIntoView({block:"center", behavior:"smooth"});
       }, 280);
     });
+  });
+
+  var autoSyncTimer = null;
+  var autoSyncFailedToastShown = false;
+  var AUTO_SYNC_DEBOUNCE_MS = 2500;
+
+  function scheduleAutoSync(){
+    if(!state || !state.autoSyncEnabled) return;
+    clearTimeout(autoSyncTimer);
+    autoSyncTimer = setTimeout(runAutoSync, AUTO_SYNC_DEBOUNCE_MS);
+  }
+
+  function runAutoSync(reason){
+    if(!state || !state.autoSyncEnabled) return;
+    if(!navigator.onLine) return; // don't even try — avoids a slow hang while offline
+    var cfg = loadSyncConfig();
+    if(!cfg.owner || !cfg.repo || !cfg.token) return; // not connected, nothing to do
+
+    var indicator = document.getElementById("autoSyncIndicator");
+    if(indicator) indicator.classList.add("syncing");
+
+    pushDataToGitHub(cfg)
+      .then(function(){
+        autoSyncFailedToastShown = false;
+        setSyncStatus("Auto-synced at "+new Date().toLocaleTimeString()+".", "ok");
+        if(indicator) indicator.classList.remove("syncing");
+      })
+      .catch(function(err){
+        console.error("Auto-sync failed", err);
+        setSyncStatus("Auto-sync failed: "+err.message, "error");
+        if(indicator) indicator.classList.remove("syncing");
+        if(!autoSyncFailedToastShown){
+          autoSyncFailedToastShown = true;
+          showToast("Auto-sync couldn't reach GitHub. Will keep retrying.");
+        }
+      });
+  }
+
+  window.addEventListener("online", function(){
+    autoSyncFailedToastShown = false;
+    if(state.autoSyncEnabled) runAutoSync("reconnect");
+  });
+
+  var autoSyncToggle = document.getElementById("autoSyncToggle");
+  autoSyncToggle.checked = state.autoSyncEnabled;
+  autoSyncToggle.addEventListener("change", function(){
+    state.autoSyncEnabled = autoSyncToggle.checked;
+    localStorage.setItem("jarful_auto_sync", state.autoSyncEnabled ? "on" : "off");
+    if(state.autoSyncEnabled){
+      var cfg = loadSyncConfig();
+      if(!cfg.owner || !cfg.repo || !cfg.token){
+        showToast("Auto-sync is on, but you still need to connect GitHub Sync.");
+      } else {
+        showToast("Auto-sync turned on.");
+        scheduleAutoSync();
+      }
+    }
   });
 
   populateSyncFields();
