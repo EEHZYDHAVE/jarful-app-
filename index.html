@@ -274,8 +274,15 @@
   .jar-tag.over{background:rgba(255,92,92,var(--chip-bg-alpha)); color:var(--alert);}
   .jar-tag.empty{background:var(--ink-softer); color:var(--text-faint);}
   .jar-balance-row{display:flex; justify-content:space-between; align-items:baseline; width:100%; margin-top:14px; padding-top:12px; border-top:1px solid var(--line); font-size:0.78rem; color:var(--text-faint);}
+  .jar-balance-row--debt{margin-top:5px; padding-top:0; border-top:none;}
   .jar-balance-row .val{color:var(--paper); font-weight:700; font-size:0.92rem;}
   .jar-balance-row .val.negative{color:var(--alert);}
+  .settle-up-btn{
+    width:100%; margin-top:10px; padding:9px 0; border-radius:999px; border:1px solid color-mix(in srgb, var(--alert) 40%, transparent);
+    background:color-mix(in srgb, var(--alert) 12%, transparent); color:var(--alert); font-weight:700; font-size:0.84rem;
+    transition:background .15s, border-color .15s;
+  }
+  .settle-up-btn:hover{background:color-mix(in srgb, var(--alert) 20%, transparent); border-color:var(--alert);}
 
 
   .jar-hero-panel{display:none;}
@@ -426,6 +433,7 @@
   .history-amount{font-weight:600; font-size:1.00rem; white-space:nowrap; font-family:'IBM Plex Mono', monospace;}
   .history-amount.income{color:var(--teal-bright);}
   .history-amount.expense{color:var(--paper);}
+  .history-amount.settle{color:var(--text-muted);}
   .history-inline-actions{display:flex; align-items:center; gap:2px; flex-shrink:0;}
   .history-edit{
     background:none; border:none; color:var(--text-faint); font-size:1.05rem; padding:3px 7px;
@@ -1131,6 +1139,25 @@
       </form>
     </div>
   </div>
+
+  <div id="settleUpModalOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="settleUpModalTitle">Settle up</h3>
+        <button id="settleUpModalClose" aria-label="Close">✕</button>
+      </div>
+      <form id="settleUpForm">
+        <p class="percent-total" id="settleUpInfo" style="margin-top:-6px;"></p>
+        <label>Amount to pay down
+          <input type="number" id="settleUpAmount" min="0" step="0.01">
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="settleUpCancelBtn" class="modal-btn-secondary">Cancel</button>
+          <button type="submit" class="modal-btn-primary">Settle</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1421,11 +1448,53 @@
     return d.getFullYear()===state.period.year && d.getMonth()===state.period.month;
   }
 
+  // Walks a jar's income/expense/settle history in chronological order to split
+  // its lifetime balance into "available" (spendable now) and "debt" (frozen
+  // shortfall that only moves when the user explicitly settles it). Ordinary
+  // income — auto-split or directed — only ever adds to available; an expense
+  // draws from available first and only then digs debt deeper; a settle moves
+  // money from available to cancel out debt. available + debt always equals
+  // the jar's traditional lifetime balance, so this never changes that number,
+  // only how it's split for display.
+  function computeJarDebt(jarId){
+    var events = [];
+    data.transactions.forEach(function(t, idx){
+      if(t.type==="income" && t.splits && t.splits[jarId] > 0){
+        events.push({date:t.date, idx:idx, kind:"income", amt:t.splits[jarId]});
+      } else if(t.type==="expense"){
+        var cat = categoryById(t.categoryId);
+        if(cat && cat.jarId===jarId){
+          events.push({date:t.date, idx:idx, kind:"expense", amt:t.amount});
+        }
+      } else if(t.type==="settle" && t.jarId===jarId){
+        events.push({date:t.date, idx:idx, kind:"settle", amt:t.amount});
+      }
+    });
+    events.sort(function(a,b){
+      if(a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return a.idx - b.idx;
+    });
+    var available = 0, debt = 0;
+    events.forEach(function(e){
+      if(e.kind==="income"){
+        available += e.amt;
+      } else if(e.kind==="expense"){
+        if(available >= e.amt){ available -= e.amt; }
+        else { var shortfall = e.amt - available; available = 0; debt -= shortfall; }
+      } else if(e.kind==="settle"){
+        var payDown = Math.min(e.amt, available, -debt);
+        available -= payDown;
+        debt += payDown;
+      }
+    });
+    return round2(debt); // always <= 0
+  }
+
   function computeStats(){
     var periodTxns = data.transactions.filter(inPeriod);
     var totalIncome=0, totalSpent=0, totalUnallocated=0;
     var perJar = {};
-    data.jars.forEach(function(j){ perJar[j.id] = {allocated:0, spent:0, balance:0}; });
+    data.jars.forEach(function(j){ perJar[j.id] = {allocated:0, spent:0, balance:0, debt:0, available:0}; });
     var perSource = {};
     data.incomeSources.forEach(function(s){ perSource[s.id] = 0; });
     var unspecifiedSourceIncome = 0;
@@ -1439,11 +1508,13 @@
         });
         if(t.sourceId && perSource.hasOwnProperty(t.sourceId)) perSource[t.sourceId] += t.amount;
         else unspecifiedSourceIncome += t.amount;
-      } else {
+      } else if(t.type==="expense"){
         totalSpent += t.amount;
         var cat = categoryById(t.categoryId);
         if(cat && cat.jarId && perJar[cat.jarId]) perJar[cat.jarId].spent += t.amount;
       }
+      // "settle" transactions are a reclassification of money already counted
+      // elsewhere, not new income or spend — deliberately excluded from both.
     });
 
     data.transactions.forEach(function(t){
@@ -1451,10 +1522,16 @@
         Object.keys(t.splits||{}).forEach(function(jid){
           if(perJar[jid]) perJar[jid].balance += t.splits[jid];
         });
-      } else {
-        var cat = categoryById(t.categoryId);
-        if(cat && cat.jarId && perJar[cat.jarId]) perJar[cat.jarId].balance -= t.amount;
+      } else if(t.type==="expense"){
+        var cat2 = categoryById(t.categoryId);
+        if(cat2 && cat2.jarId && perJar[cat2.jarId]) perJar[cat2.jarId].balance -= t.amount;
       }
+    });
+
+    data.jars.forEach(function(j){
+      var debt = computeJarDebt(j.id);
+      perJar[j.id].debt = debt;
+      perJar[j.id].available = round2(perJar[j.id].balance - debt);
     });
 
     return {totalIncome:totalIncome, totalSpent:totalSpent, totalUnallocated:totalUnallocated, perJar:perJar, perSource:perSource, unspecifiedSourceIncome:unspecifiedSourceIncome};
@@ -1549,6 +1626,11 @@
   }
 
   function buildJarCardHTML(j, v, allowAnim){
+    var hasDebt = v.s.debt < -0.004;
+    var balanceRows = hasDebt
+      ? '<div class="jar-balance-row"><span>Available</span><span class="val mono">'+fmt(v.s.available)+'</span></div>'+
+        '<div class="jar-balance-row jar-balance-row--debt"><span>Still owed</span><span class="val mono negative">'+fmt(v.s.debt)+'</span></div>'
+      : '<div class="jar-balance-row"><span>Running balance</span><span class="val mono'+(v.s.balance<0?' negative':'')+'">'+fmt(v.s.balance)+'</span></div>';
     return '<div class="jar-card-head">'+
         '<span class="jar-chip-dot" style="background:'+j.color+'; color:'+j.color+';"></span>'+
         '<span class="jar-name">'+escapeHtml(j.name)+'<span class="jar-name-target">Target '+j.percent+'%</span></span>'+
@@ -1557,7 +1639,8 @@
       '<div class="jar-hero mono">'+(v.hasAllocation ? fmt(v.remaining) : fmt(0))+'</div>'+
       '<div class="jar-hero-sub">'+(v.hasAllocation ? "of "+fmt(v.s.allocated)+" allocated" : "log income to allocate this jar")+'</div>'+
       '<span class="jar-tag '+v.statusClass+'">'+v.tagText+'</span>'+
-      '<div class="jar-balance-row"><span>Running balance</span><span class="val mono'+(v.s.balance<0?' negative':'')+'">'+fmt(v.s.balance)+'</span></div>';
+      balanceRows+
+      (hasDebt ? '<button type="button" class="settle-up-btn" data-jar-id="'+j.id+'" data-jar-name="'+escapeHtml(j.name)+'" data-available="'+v.s.available+'" data-debt="'+(-v.s.debt)+'">Settle up</button>' : '');
   }
 
   function renderJarHero(stats){
@@ -2066,6 +2149,7 @@
 
     function txnJarId(t){
       if(t.type==="expense"){ var c=categoryById(t.categoryId); return c ? c.jarId : null; }
+      if(t.type==="settle") return t.jarId || null;
       return null;
     }
 
@@ -2091,7 +2175,7 @@
         groups.push(g);
       }
       groupByDate[t.date].items.push(t);
-      groupByDate[t.date].net += (t.type==="income" ? t.amount : -t.amount);
+      groupByDate[t.date].net += (t.type==="income" ? t.amount : t.type==="expense" ? -t.amount : 0);
     });
 
     groups.forEach(function(g){
@@ -2124,6 +2208,12 @@
           } else {
             sub = (t.note ? t.note+" · " : "") + "split across "+data.jars.length+" jars";
           }
+        } else if(t.type==="settle"){
+          var settleJar = jarById(t.jarId);
+          chipColor = settleJar ? settleJar.color : "#8A96A8";
+          chipLabel = "Settled";
+          title = "Paid down debt";
+          sub = settleJar ? settleJar.name : "Unassigned";
         } else {
           var cat = categoryById(t.categoryId);
           var jar = cat ? jarById(cat.jarId) : null;
@@ -2133,9 +2223,11 @@
           sub = t.note || "";
         }
         li.style.setProperty("--accent", chipColor);
+        var canEdit = t.type !== "settle";
+        var amountSign = t.type==="income" ? "+" : t.type==="expense" ? "−" : "";
         li.innerHTML =
           '<div class="history-swipe-actions">'+
-            '<button class="history-edit" data-id="'+t.id+'" aria-label="Edit entry">✎</button>'+
+            (canEdit ? '<button class="history-edit" data-id="'+t.id+'" aria-label="Edit entry">✎</button>' : '')+
             '<button class="history-del" data-id="'+t.id+'" aria-label="Delete entry">✕</button>'+
           '</div>'+
           '<div class="history-content">'+
@@ -2143,9 +2235,9 @@
               '<div class="history-title">'+escapeHtml(title)+'</div>'+
               '<div class="history-sub"><span class="history-tag" style="color:'+chipColor+';">'+escapeHtml(chipLabel)+'</span>'+(sub?' · '+escapeHtml(sub):'')+'</div>'+
             '</div>'+
-            '<div class="history-amount '+t.type+' mono">'+(t.type==="income"?"+":"−")+fmt(t.amount)+'</div>'+
+            '<div class="history-amount '+t.type+' mono">'+amountSign+fmt(t.amount)+'</div>'+
             '<div class="history-inline-actions">'+
-              '<button class="history-edit" data-id="'+t.id+'" aria-label="Edit entry">✎</button>'+
+              (canEdit ? '<button class="history-edit" data-id="'+t.id+'" aria-label="Edit entry">✎</button>' : '')+
               '<button class="history-del" data-id="'+t.id+'" aria-label="Delete entry">✕</button>'+
             '</div>'+
           '</div>';
@@ -2844,6 +2936,58 @@
     save(data);
     renderManage();
     closeManageEditModal();
+  });
+
+  // ---------- Settle up (pay down jar debt) ----------
+  var settlingJar = { id:null, cap:0 };
+
+  function openSettleUpModal(jarId, jarName, available, debt){
+    var cap = round2(Math.min(available, debt));
+    if(cap <= 0){ showToast("Nothing to settle right now."); return; }
+    settlingJar = { id:jarId, cap:cap };
+    document.getElementById("settleUpModalTitle").textContent = "Settle up · "+jarName;
+    document.getElementById("settleUpInfo").textContent =
+      "You have "+fmt(available)+" available and "+fmt(debt)+" still owed in "+jarName+". How much do you want to put toward it?";
+    var amountInput = document.getElementById("settleUpAmount");
+    amountInput.max = cap;
+    amountInput.value = cap;
+    document.getElementById("settleUpModalOverlay").style.display = "flex";
+    setTimeout(function(){ amountInput.focus(); amountInput.select(); }, 30);
+  }
+
+  function closeSettleUpModal(){
+    document.getElementById("settleUpModalOverlay").style.display = "none";
+    settlingJar = { id:null, cap:0 };
+  }
+
+  document.addEventListener("click", function(e){
+    var btn = e.target.closest(".settle-up-btn");
+    if(!btn) return;
+    openSettleUpModal(btn.dataset.jarId, btn.dataset.jarName, Number(btn.dataset.available), Number(btn.dataset.debt));
+  });
+
+  document.getElementById("settleUpModalClose").addEventListener("click", closeSettleUpModal);
+  document.getElementById("settleUpCancelBtn").addEventListener("click", closeSettleUpModal);
+  document.getElementById("settleUpModalOverlay").addEventListener("click", function(e){
+    if(e.target.id==="settleUpModalOverlay") closeSettleUpModal();
+  });
+
+  document.getElementById("settleUpForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    if(!settlingJar.id) return;
+    var amount = round2(Number(document.getElementById("settleUpAmount").value) || 0);
+    if(amount <= 0){ showToast("Enter an amount greater than zero."); return; }
+    if(amount > settlingJar.cap + 0.004){ amount = settlingJar.cap; }
+    var jar = jarById(settlingJar.id);
+    data.transactions.push({
+      id: uid("t"), type:"settle", jarId: settlingJar.id, amount: amount,
+      date: isoDate(new Date()), note: ""
+    });
+    save(data);
+    closeSettleUpModal();
+    renderDashboard();
+    if(state.view==="history") renderHistoryView();
+    showToast("Settled "+fmt(amount)+(jar ? " in "+jar.name+"." : "."));
   });
 
   document.getElementById("jarManageList").addEventListener("click", function(e){
