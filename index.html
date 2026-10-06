@@ -1512,9 +1512,13 @@
         totalSpent += t.amount;
         var cat = categoryById(t.categoryId);
         if(cat && cat.jarId && perJar[cat.jarId]) perJar[cat.jarId].spent += t.amount;
+      } else if(t.type==="settle"){
+        // Counts against this jar's own budget-remaining for the period it was
+        // settled in (the money really did leave the jar), but deliberately
+        // left out of the app-wide "Spent" total — it's debt repayment, not
+        // new overall spending.
+        if(t.jarId && perJar[t.jarId]) perJar[t.jarId].spent += t.amount;
       }
-      // "settle" transactions are a reclassification of money already counted
-      // elsewhere, not new income or spend — deliberately excluded from both.
     });
 
     data.transactions.forEach(function(t){
