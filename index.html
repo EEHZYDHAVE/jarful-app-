@@ -608,6 +608,11 @@
   }
   .sync-fields input:focus{border-color:var(--teal-bright); outline:none;}
   .settings-section-title{font-size:0.78rem; text-transform:uppercase; letter-spacing:0.07em; color:var(--text-faint); font-family:'Inter'; font-weight:700; margin-bottom:2px;}
+  .wipe-option{flex-direction:row !important; align-items:flex-start; gap:10px !important; padding:10px 12px; border:1px solid var(--glass-border); border-radius:var(--radius-sm); background:var(--glass-bg); cursor:pointer;}
+  .wipe-option input{margin-top:3px; flex-shrink:0; width:auto !important; padding:0 !important;}
+  .wipe-option small{color:var(--text-faint);}
+  .wipe-submit{background:var(--alert) !important; color:#fff !important;}
+  .wipe-submit:disabled{opacity:0.35; cursor:not-allowed;}
   .settings-row{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 0;}
   .settings-row-label{font-size:0.96rem; color:var(--paper); font-weight:600;}
   .settings-row-sub{font-size:0.82rem; color:var(--text-faint); margin-top:2px;}
@@ -1072,6 +1077,15 @@
 
               <div class="sync-status" id="syncStatus">Not synced yet.</div>
             </div>
+
+            <div class="manage-col sync-panel" style="max-width:520px; margin-top:28px;">
+              <h3 class="settings-section-title">Data</h3>
+              <div class="percent-total">Download a copy of everything on this device, or wipe it and start over.</div>
+              <div class="sync-actions" style="margin-top:12px;">
+                <button type="button" id="backupBtn" class="modal-btn-secondary">↓ Download backup</button>
+                <button type="button" id="wipeOpenBtn" class="modal-btn-secondary sync-disconnect">Wipe all data…</button>
+              </div>
+            </div>
           </div>
         </section>
       </main>
@@ -1135,6 +1149,31 @@
         <div class="modal-actions">
           <button type="button" id="manageEditDeleteBtn" class="modal-btn-secondary sync-disconnect">Delete</button>
           <button type="submit" class="modal-btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="wipeModalOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Wipe data</h3>
+        <button id="wipeModalClose" aria-label="Close">✕</button>
+      </div>
+      <form id="wipeForm">
+        <p class="percent-total" style="margin-top:-6px;">This can't be undone. Download a backup first if there's any chance you'll want this data again.</p>
+        <label class="wipe-option"><input type="radio" name="wipeScope" value="all" checked>
+          <span><strong>Everything</strong><br><small>Back to a brand-new install: default jars, categories and sources, no entries.</small></span></label>
+        <label class="wipe-option"><input type="radio" name="wipeScope" value="entries">
+          <span><strong>Entries and goals only</strong><br><small>Keep my jars, categories, income sources and exchange rates.</small></span></label>
+        <p class="percent-total warn" id="wipeSyncWarning" style="display:none;">GitHub Sync is connected. With auto-sync on, the wiped data will be pushed and replace the copy stored on GitHub.</p>
+        <button type="button" id="wipeBackupBtn" class="modal-btn-secondary">↓ Download backup first</button>
+        <label>Type WIPE to confirm
+          <input type="text" id="wipeConfirmInput" autocomplete="off" autocapitalize="characters" placeholder="WIPE">
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="wipeCancelBtn" class="modal-btn-secondary">Cancel</button>
+          <button type="submit" id="wipeSubmitBtn" class="modal-btn-primary wipe-submit" disabled>Wipe</button>
         </div>
       </form>
     </div>
@@ -1448,14 +1487,16 @@
     return d.getFullYear()===state.period.year && d.getMonth()===state.period.month;
   }
 
-  // Walks a jar's income/expense/settle history in chronological order to split
-  // its lifetime balance into "available" (spendable now) and "debt" (frozen
-  // shortfall that only moves when the user explicitly settles it). Ordinary
-  // income — auto-split or directed — only ever adds to available; an expense
-  // draws from available first and only then digs debt deeper; a settle moves
-  // money from available to cancel out debt. available + debt always equals
-  // the jar's traditional lifetime balance, so this never changes that number,
-  // only how it's split for display.
+  // Splits a jar's lifetime balance into "available" (spendable now) and "debt"
+  // (a frozen shortfall that only shrinks when the user explicitly settles it).
+  //
+  // A shortfall only becomes debt if the jar is still in the red when its
+  // calendar month ends. Inside a month, income and expenses simply net against
+  // each other, so paying rent on the 1st and getting paid on the 3rd never
+  // creates debt. Once a shortfall has been frozen, later income only adds to
+  // available; it never repays the debt on its own. Settling moves money from
+  // available to cancel debt. The current month is never frozen early.
+  // available + debt always equals the jar's ordinary lifetime balance.
   function computeJarDebt(jarId){
     var events = [];
     data.transactions.forEach(function(t, idx){
@@ -1474,19 +1515,26 @@
       if(a.date !== b.date) return a.date < b.date ? -1 : 1;
       return a.idx - b.idx;
     });
-    var available = 0, debt = 0;
+    var nowKey = isoDate(new Date()).slice(0,7);
+    var running = 0, debt = 0, curMonth = null;
+    function closeMonth(){
+      if(running < 0){ debt += running; running = 0; }
+    }
     events.forEach(function(e){
+      var mk = e.date.slice(0,7);
+      if(curMonth !== null && mk !== curMonth && curMonth < nowKey) closeMonth();
+      curMonth = mk;
       if(e.kind==="income"){
-        available += e.amt;
+        running += e.amt;
       } else if(e.kind==="expense"){
-        if(available >= e.amt){ available -= e.amt; }
-        else { var shortfall = e.amt - available; available = 0; debt -= shortfall; }
+        running -= e.amt;
       } else if(e.kind==="settle"){
-        var payDown = Math.min(e.amt, available, -debt);
-        available -= payDown;
+        var payDown = Math.min(e.amt, Math.max(running, 0), -debt);
+        running -= payDown;
         debt += payDown;
       }
     });
+    if(curMonth !== null && curMonth < nowKey) closeMonth();
     return round2(debt); // always <= 0
   }
 
@@ -1632,7 +1680,7 @@
   function buildJarCardHTML(j, v, allowAnim){
     var hasDebt = v.s.debt < -0.004;
     var balanceRows = hasDebt
-      ? '<div class="jar-balance-row"><span>Available</span><span class="val mono">'+fmt(v.s.available)+'</span></div>'+
+      ? '<div class="jar-balance-row"><span>Available</span><span class="val mono'+(v.s.available<0?' negative':'')+'">'+fmt(v.s.available)+'</span></div>'+
         '<div class="jar-balance-row jar-balance-row--debt"><span>Still owed</span><span class="val mono negative">'+fmt(v.s.debt)+'</span></div>'
       : '<div class="jar-balance-row"><span>Running balance</span><span class="val mono'+(v.s.balance<0?' negative':'')+'">'+fmt(v.s.balance)+'</span></div>';
     return '<div class="jar-card-head">'+
@@ -2940,6 +2988,57 @@
     save(data);
     renderManage();
     closeManageEditModal();
+  });
+
+  // ---------- Backup + wipe ----------
+  function downloadBackup(){
+    var blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "jarful-backup-"+isoDate(new Date())+".json";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    showToast("Backup downloaded.");
+  }
+
+  function openWipeModal(){
+    var cfg = loadSyncConfig();
+    var connected = !!(cfg.owner && cfg.repo && cfg.token);
+    document.getElementById("wipeSyncWarning").style.display = (connected && state.autoSyncEnabled) ? "" : "none";
+    document.getElementById("wipeConfirmInput").value = "";
+    document.getElementById("wipeSubmitBtn").disabled = true;
+    document.querySelector('input[name="wipeScope"][value="all"]').checked = true;
+    document.getElementById("wipeModalOverlay").style.display = "flex";
+  }
+  function closeWipeModal(){ document.getElementById("wipeModalOverlay").style.display = "none"; }
+
+  document.getElementById("backupBtn").addEventListener("click", downloadBackup);
+  document.getElementById("wipeBackupBtn").addEventListener("click", downloadBackup);
+  document.getElementById("wipeOpenBtn").addEventListener("click", openWipeModal);
+  document.getElementById("wipeModalClose").addEventListener("click", closeWipeModal);
+  document.getElementById("wipeCancelBtn").addEventListener("click", closeWipeModal);
+  document.getElementById("wipeModalOverlay").addEventListener("click", function(e){
+    if(e.target.id==="wipeModalOverlay") closeWipeModal();
+  });
+  document.getElementById("wipeConfirmInput").addEventListener("input", function(){
+    document.getElementById("wipeSubmitBtn").disabled = this.value.trim().toUpperCase() !== "WIPE";
+  });
+  document.getElementById("wipeForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    if(document.getElementById("wipeConfirmInput").value.trim().toUpperCase() !== "WIPE") return;
+    var scope = document.querySelector('input[name="wipeScope"]:checked').value;
+    if(scope==="entries"){
+      data.transactions = [];
+      data.goals = [];
+    } else {
+      data = defaultData();
+    }
+    state.heroJarIndex = null;
+    save(data);
+    closeWipeModal();
+    setView(state.view);
+    showToast(scope==="entries" ? "Entries and goals cleared." : "All data wiped. Fresh start.");
   });
 
   // ---------- Settle up (pay down jar debt) ----------
